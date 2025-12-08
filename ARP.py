@@ -41,7 +41,8 @@ def test(src_ip, dst_mac):
 t1 = threading.Thread(target=test, args=("192.168.1.101", "00:0c:29:94:84:aa"), daemon=True)
 t2 = threading.Thread(target=test, args=("192.168.1.1", "00:0c:29:20:af:e4"), daemon=True)
 
-t1.start()
-t2.start()
+#t1.start()
+#t2.start()
+#enable_forwarding()
+start_kernel_forwarding("192.168.1.1", "192.168.1.101", "192.168.1.102", "eth0")
 input("stop")
-		
