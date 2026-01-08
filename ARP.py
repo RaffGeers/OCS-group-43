@@ -138,4 +138,4 @@ interface = "eth0"
 victims = [(victim_ip, victim_mac), (router_ip, router_mac)]
 
 # start the attack with the placeholder values to avoid having to go through discovery every time for testing
-start_attack(victims, self_ip, self_mac, interface)
+# start_attack(victims, self_ip, self_mac, interface)
