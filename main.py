@@ -25,6 +25,12 @@ def main():
             if len(victims) < 2:
                 input("Not enough victims returned...")
             else:
+                from discovery import print_devices
+                os.system("clear")
+                print("Selected victims:")
+                print_devices(victims)
+                print()
+                input("Press Enter to continue...")
                 start_attack(victims, self_ip, self_mac, interface)
         elif choice == "2":
             break
