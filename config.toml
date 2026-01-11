@@ -5,7 +5,7 @@ arp_poison_icmp = 0         # boolean
 arp_poison_reply = 1        # boolean
 arp_poison_request = 1      # boolean
 arp_poison_oneway = 0       # boolean
-arp_skip_discovery = 0      # boolean
+arp_skip_discovery = 1      # boolean
 arp_hardcoded_group1 = [
     ["192.168.1.101", "00:0c:29:d8:3b:bf"]
 ]                                   # list of ip and mac pairs
