@@ -168,11 +168,11 @@ def print_fn(pkt, interface):
 
 def drop_port_53():
 	run("iptables -I FORWARD -p udp --dport 53 -j DROP")
-	# run("iptables -I FORWARD -p tcp --dport 53 -j DROP")
+	run("iptables -I FORWARD -p tcp --dport 53 -j DROP")
 
 def allow_port_53():
-    run("iptables -D FORWARD -p udp --dport 53 -j DROP")
-	# run("iptables -D FORWARD -p tcp --dport 53 -j DROP")
+	run("iptables -D FORWARD -p udp --dport 53 -j DROP")
+	run("iptables -D FORWARD -p tcp --dport 53 -j DROP")
 	
 def start_attack(group1, group2, self_ip, self_mac, interface):
 	enable_kernel_forwarding(interface)
