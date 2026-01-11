@@ -2,12 +2,13 @@ from scapy.all import *
 import subprocess
 
 
-def intercept_pkts(src_ip, dst_ip, self_mac, interface, lfilter, callback):
+def intercept_pkts(victims, self_mac, interface, lfilter, callback):
+	ips = [ip for (ip, mac) in victims]
 	sniff(
 		iface=interface, 
 		store=False,
-		prn=lambda pkt: callback(pkt, src_ip, dst_ip, interface),
-		filter=f"src host {src_ip} and ether src not {self_mac}", # intercept only packets from src_ip and ignore own (replayed) packets
+		prn=lambda pkt: callback(pkt, ips, interface),
+		filter=f"ether src not {self_mac}", # intercept only packets from src_ip and ignore own (replayed) packets
 		lfilter=lambda pkt: lfilter(pkt)
 	)
 		

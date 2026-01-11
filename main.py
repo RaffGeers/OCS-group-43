@@ -1,4 +1,5 @@
 import os
+from config import config
 
 def main():
     from discovery import start_discovery
@@ -12,14 +13,25 @@ def main():
         choice = input("Press a number: ")
 
         if choice == "1":
-            victims, interface, self_ip, self_mac = start_discovery()
+            if config.arp_skip_discovery:
+                from discovery import get_self_ip, get_self_mac
+                victims = config.arp_hardcoded_victims
+                interface = config.arp_hardcoded_interface
+                self_ip = get_self_ip(interface)
+                self_mac = get_self_mac(interface)
+            else:
+                victims, interface, self_ip, self_mac = start_discovery()
+
             if len(victims) < 2:
                 input("Not enough victims returned...")
             else:
-                input("Do the ARP attack...")
-                victim_ip, victim_mac = victims[0]
-                router_ip, router_mac = victims[1]
-                start_attack(victim_ip, victim_mac, router_ip, router_mac, self_ip, self_mac, interface)
+                from discovery import print_devices
+                os.system("clear")
+                print("Selected victims:")
+                print_devices(victims)
+                print()
+                input("Press Enter to continue...")
+                start_attack(victims, self_ip, self_mac, interface)
         elif choice == "2":
             break
 

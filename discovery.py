@@ -28,12 +28,6 @@ def start_discovery():
     devices = ans_to_ip_and_mac_list(ans)
 
     victims = select_victims(devices)
-    if len(victims) != 0:
-        os.system("clear")
-        print("Selected victims:")
-        print_devices(victims)
-        print()
-        input("Press Enter to continue...")
     
     return victims, interface_name, self_ip, self_mac
 

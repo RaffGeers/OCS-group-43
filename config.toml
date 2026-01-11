@@ -1,0 +1,12 @@
+[arp]
+arp_poison_warm_up = 1      # s
+arp_poison_delay = 10       # s
+arp_poison_icmp = 0         # boolean
+arp_poison_reply = 1        # boolean
+arp_poison_request = 1      # boolean
+arp_skip_discovery = 1      # boolean
+arp_hardcoded_victims = [
+    ["192.168.1.101", "00:0c:29:d8:3b:bf"],
+    ["192.168.1.1", "00:0c:29:87:40:17"]
+]                                   # list of ip and mac pairs
+arp_hardcoded_interface = "eth0"    # string
