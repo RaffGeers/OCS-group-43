@@ -146,8 +146,12 @@ def select_victims(devices):
 
 # Prints the IP and MAC addresses of the devices list
 def print_devices(devices):
+    gateway_ip = conf.route.route("0.0.0.0")[2]
     for idx, (ip, mac) in enumerate(devices):
-        print(f"{idx + 1}: {ip} {mac}")
+        if ip == gateway_ip:
+            print(f"{idx + 1}: {ip} {mac} (default gateway)")
+        else:
+            print(f"{idx + 1}: {ip} {mac}")
 
 # Returns CIDR (e.g. 192.168.1.0/24) of the given interface
 def get_cidr(interface_name):
