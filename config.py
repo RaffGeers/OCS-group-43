@@ -10,8 +10,10 @@ class Config:
     arp_poison_icmp: bool
     arp_poison_reply: bool
     arp_poison_request: bool
+    arp_poison_oneway: bool
     arp_skip_discovery: bool
-    arp_hardcoded_victims: List[Tuple[str]]
+    arp_hardcoded_group1: List[Tuple[str]]
+    arp_hardcoded_group2: List[Tuple[str]]
     arp_hardcoded_interface: str
 
 def _load() -> Config:

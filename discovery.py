@@ -6,8 +6,8 @@ import psutil
 # Displays the CIDR of the selected interface
 # Displays the number of addresses to be scanned
 # Performs an ARP ping with the given CIDR
-# Prompts the user to select at least 2 victims
-# Returns the list of victims, interface name, the IP and MAC address of this device
+# Prompts the user to select at least 1 victim in both group1 and group2
+# Returns the list of victims (group1 and group2), interface name, the IP and MAC address of this device
 def start_discovery():
     interface_name = select_interface()
     os.system("clear")
@@ -27,9 +27,9 @@ def start_discovery():
     ans, unans = arping(cidr)
     devices = ans_to_ip_and_mac_list(ans)
 
-    victims = select_victims(devices)
+    group1, group2 = select_victims(devices)
     
-    return victims, interface_name, self_ip, self_mac
+    return group1, group2, interface_name, self_ip, self_mac
 
 # Lets the user select the network interface on which the ARP ping will be performed
 def select_interface():
@@ -68,21 +68,61 @@ def select_victims(devices):
         input("Press Enter to exit...")
         return []
 
-    victims = []
+    # Select group 1
+    group1 = []
     while True:
         os.system("clear")
 
-        if len(victims) > 0:
-            print("Selected victims:")
-            print_devices(victims)
+        if len(group1) > 0:
+            print("Group 1:")
+            print_devices(group1)
+            print()
+
+        if len(devices) > 1:
+            print(f"Select victim {len(group1) + 1}:")
+            print_devices(devices)
+            print()
+        else:
+            print("Only 1 device left!")
+            input("Press Enter to move onto selecting the devices of group 2...")
+            break
+
+        if (len(group1) >= 1):
+            print("Enter D if you're done with selection to move onto selecting the devices of group 2")
+            print()
+
+        choice = input("Enter choice: ")
+
+        if choice == "d":
+            break
+
+        if not choice.isdigit():
+            continue
+        
+        selectedVictim = int(choice)
+
+        if selectedVictim < 1 or selectedVictim > len(devices):
+            continue
+
+        group1.append(devices[selectedVictim - 1])
+        devices.remove(devices[selectedVictim - 1])
+
+    # Select group 2
+    group2 = []
+    while True:
+        os.system("clear")
+
+        if len(group2) > 0:
+            print("Group 2:")
+            print_devices(group2)
             print()
 
         if len(devices) > 0:
-            print(f"Select victim {len(victims) + 1}:")
+            print(f"Select victim {len(group2) + 1}:")
             print_devices(devices)
             print()
 
-        if (len(victims) >= 2):
+        if (len(group2) >= 1):
             print("Enter D if you're done with selection")
             print()
 
@@ -99,10 +139,10 @@ def select_victims(devices):
         if selectedVictim < 1 or selectedVictim > len(devices):
             continue
 
-        victims.append(devices[selectedVictim - 1])
+        group2.append(devices[selectedVictim - 1])
         devices.remove(devices[selectedVictim - 1])
 
-    return victims
+    return group1, group2
 
 # Prints the IP and MAC addresses of the devices list
 def print_devices(devices):

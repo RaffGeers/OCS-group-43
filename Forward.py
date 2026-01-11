@@ -2,8 +2,8 @@ from scapy.all import *
 import subprocess
 
 
-def intercept_pkts(victims, self_mac, interface, lfilter, callback):
-	ips = [ip for (ip, mac) in victims]
+def intercept_pkts(group1, group2, self_mac, interface, lfilter, callback):
+	ips = [ip for (ip, mac) in group1 + group2]
 	sniff(
 		iface=interface, 
 		store=False,
