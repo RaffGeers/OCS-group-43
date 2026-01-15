@@ -16,9 +16,11 @@ class ArpConfig:
     hardcoded_group1: List[Tuple[str]]
     hardcoded_group2: List[Tuple[str]]
     hardcoded_interface: str
+    dos_enabled: bool
 
 @dataclass
 class DnsConfig:
+    enabled: bool
     domains: List[Tuple[str]]
 
 @dataclass

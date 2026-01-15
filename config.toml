@@ -14,8 +14,10 @@ hardcoded_group2 = [
     ["192.168.1.1", "00:0c:29:87:40:17"]
 ]                                   # list of ip and mac pairs
 hardcoded_interface = "eth0"    # string
+dos_enabled = 1         # boolean
 
 [dns]
+enabled = 1     # boolean
 domains = [
     ["google.nl", "1.2.3.4"],
     ["google.com", "1.2.3.4"],

