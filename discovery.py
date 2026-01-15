@@ -2,6 +2,8 @@ from scapy.all import *
 import ipaddress
 import psutil
 
+ip_mac_cache = {}
+
 # Prompts the user to choose an interface
 # Displays the CIDR of the selected interface
 # Displays the number of addresses to be scanned
@@ -190,5 +192,6 @@ def ans_to_ip_and_mac_list(ans):
         ip = recv.psrc
         mac = recv.hwsrc
         devices.append((ip, mac))
+        ip_mac_cache[ip] = mac
 
     return devices

