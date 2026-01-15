@@ -1,16 +1,24 @@
 [arp]
-arp_poison_warm_up = 1      # s
-arp_poison_delay = 10       # s
-arp_poison_icmp = 0         # boolean
-arp_poison_reply = 1        # boolean
-arp_poison_request = 1      # boolean
-arp_poison_oneway = 0       # boolean
-arp_automatic_discovery = 0 # boolean
-arp_skip_discovery = 1      # boolean
-arp_hardcoded_group1 = [
+poison_warm_up = 1      # s
+poison_delay = 10       # s
+poison_icmp = 0         # boolean
+poison_reply = 1        # boolean
+poison_request = 1      # boolean
+poison_oneway = 0       # boolean
+automatic_discovery = 0 # boolean
+skip_discovery = 1      # boolean
+hardcoded_group1 = [
     ["192.168.1.101", "00:0c:29:d8:3b:bf"]
 ]                                   # list of ip and mac pairs
-arp_hardcoded_group2 = [
+hardcoded_group2 = [
     ["192.168.1.1", "00:0c:29:87:40:17"]
 ]                                   # list of ip and mac pairs
-arp_hardcoded_interface = "eth0"    # string
+hardcoded_interface = "eth0"    # string
+
+[dns]
+domains = [
+    ["google.nl", "1.2.3.4"],
+    ["google.com", "1.2.3.4"],
+    ["tue.nl", "1.2.3.4"],
+    ["tue.com", "1.2.3.4"]
+]

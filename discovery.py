@@ -6,7 +6,7 @@ from config import config
 ip_mac_cache = {}
 
 def start_discovery():
-    if config.arp_skip_discovery:
+    if config.arp.skip_discovery:
         group1, group2, interface_name, self_ip, self_mac = hardcoded_discovery()
     else:
         group1, group2, interface_name, self_ip, self_mac = dynamic_discovery()
@@ -21,9 +21,9 @@ def start_discovery():
 # Returns the hardcoded victims from the config
 # Returns self ip and mac based on hardcoded interface
 def hardcoded_discovery():
-    group1 = config.arp_hardcoded_group1
-    group2 = config.arp_hardcoded_group2
-    interface_name = config.arp_hardcoded_interface
+    group1 = config.arp.hardcoded_group1
+    group2 = config.arp.hardcoded_group2
+    interface_name = config.arp.hardcoded_interface
     self_ip = get_self_ip(interface_name)
     self_mac = get_self_mac(interface_name)
     
@@ -36,7 +36,7 @@ def hardcoded_discovery():
 # Prompts the user to select at least 1 victim in both group1 and group2
 # Returns the list of victims (group1 and group2), interface name, the IP and MAC address of this device
 def dynamic_discovery():
-    if config.arp_automatic_discovery:
+    if config.arp.automatic_discovery:
         interface_name = conf.iface
     else:
         interface_name = select_interface()
@@ -57,7 +57,7 @@ def dynamic_discovery():
     ans, unans = arping(cidr)
     devices = ans_to_ip_and_mac_list(ans)
 
-    if config.arp_automatic_discovery:
+    if config.arp.automatic_discovery:
         group1, group2 = automatic_victims(devices)
         while True:
             os.system("clear")
