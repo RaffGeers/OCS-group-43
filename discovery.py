@@ -1,8 +1,33 @@
 from scapy.all import *
 import ipaddress
 import psutil
+from config import config
 
 ip_mac_cache = {}
+
+def start_discovery():
+    if config.arp_skip_discovery:
+        group1, group2, interface_name, self_ip, self_mac = hardcoded_discovery()
+    else:
+        group1, group2, interface_name, self_ip, self_mac = dynamic_discovery()
+
+    os.system("clear")
+    print_groups(group1, group2)
+    print()
+    input("Press Enter to continue...")
+
+    return group1, group2, interface_name, self_ip, self_mac
+
+# Returns the hardcoded victims from the config
+# Returns self ip and mac based on hardcoded interface
+def hardcoded_discovery():
+    group1 = config.arp_hardcoded_group1
+    group2 = config.arp_hardcoded_group2
+    interface_name = config.arp_hardcoded_interface
+    self_ip = get_self_ip(interface_name)
+    self_mac = get_self_mac(interface_name)
+    
+    return group1, group2, interface_name, self_ip, self_mac
 
 # Prompts the user to choose an interface
 # Displays the CIDR of the selected interface
@@ -10,8 +35,11 @@ ip_mac_cache = {}
 # Performs an ARP ping with the given CIDR
 # Prompts the user to select at least 1 victim in both group1 and group2
 # Returns the list of victims (group1 and group2), interface name, the IP and MAC address of this device
-def start_discovery():
-    interface_name = select_interface()
+def dynamic_discovery():
+    if config.arp_automatic_discovery:
+        interface_name = conf.iface
+    else:
+        interface_name = select_interface()
     os.system("clear")
     print(f"Selected interface: {interface_name}")
     self_ip = get_self_ip(interface_name)
@@ -29,7 +57,23 @@ def start_discovery():
     ans, unans = arping(cidr)
     devices = ans_to_ip_and_mac_list(ans)
 
-    group1, group2 = select_victims(devices)
+    if config.arp_automatic_discovery:
+        group1, group2 = automatic_victims(devices)
+        while True:
+            os.system("clear")
+            print_groups(group1, group2)
+            print()
+            print("1: Continue with the automatically chosen victims")
+            print("2: Choose the victims manually")
+            print()
+            choice = input("Enter choice: ")
+            if (choice == "1"):
+                break
+            elif (choice == "2"):
+                group1, group2 = select_victims(devices)
+                break
+    else:
+        group1, group2 = select_victims(devices)
     
     return group1, group2, interface_name, self_ip, self_mac
 
@@ -146,6 +190,22 @@ def select_victims(devices):
 
     return group1, group2
 
+# Automatic choice is router in group 2, all other devices in group 1
+def automatic_victims(devices):
+    group1 = []
+    group2 = []
+
+    gateway_ip = conf.route.route("0.0.0.0")[2]
+    for ip, mac in devices:
+        # If the device is the gateway IP assume it's the router and add it to group 2
+        if ip == gateway_ip:
+            group2.append((ip, mac))
+        # Add all other devices to group 1
+        else:
+            group1.append((ip, mac))
+
+    return group1, group2
+
 # Prints the IP and MAC addresses of the devices list
 def print_devices(devices):
     gateway_ip = conf.route.route("0.0.0.0")[2]
@@ -195,3 +255,11 @@ def ans_to_ip_and_mac_list(ans):
         ip_mac_cache[ip] = mac
 
     return devices
+
+# Prints the device IP and MAC pairs in the 2 groups
+def print_groups(group1, group2):
+    print("Group 1:")
+    print_devices(group1)
+    print()
+    print("Group 2:")
+    print_devices(group2)
