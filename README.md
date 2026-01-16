@@ -101,12 +101,11 @@ This should already create a functioning webservice which you can visit. For bet
 
     echo "<h3>it worked</h3>";
     echo "<a href='/'>send another message</a>";
-   ```
-} else {
-    echo "use the form to write a message";
-}
-?>
-
+     } else {
+         echo "use the form to write a message";
+     }
+   ?>
+     ```
 3. Creat the HTML form
    sudo nano /var/www/html/index.html
    Add the following code:
@@ -127,7 +126,7 @@ This should already create a functioning webservice which you can visit. For bet
         </form>
     </body> 
    </html>
-  ```
+       ```
 4. Restart apache
   sudo systemctl restart apache2
 
