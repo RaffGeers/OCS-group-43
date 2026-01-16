@@ -30,25 +30,39 @@ The new ubuntu host should now be active on the new network. To test you can try
 After this we can create a simple HTTPS service on the new Ubuntu host. To do this we will use apache2. The service will use HTTPS by default and will attempt to upgrade users using plain HTTP to HTTPS.
 
 1. Install apache with:
+   ```
      sudo apt update
      sudo apt install apache2 -y
-2. Verify apache is running
+   ```
+3. Verify apache is running
+   ```
      systemctl status apache2
-3. Enable required apache modules
+   ```
+5. Enable required apache modules
+   ```
      sudo a2enmod ssl
      sudo a2enmod rewrite
      sudo a2enmod headers
      sudo systemctl restart apache2
-4. Install PHP. We do this because it's an easy way to make a website that sends a POST request, which is a nice way to demonstrate SSL stripping works
+   ```
+7. Install PHP. We do this because it's an easy way to make a website that sends a POST request, which is a nice way to demonstrate SSL stripping works
+   ```
      sudo apt install php libapache2-mod-php -y
      sudo systemctl restart apache2
-5. Create a self signed certificate. Note that browsers will complain about this certificate but this is acceptable in our case. When prompted for common name, use the webserver's IP
+   ```
+9. Create a self signed certificate. Note that browsers will complain about this certificate but this is acceptable in our case. When prompted for common name, use the webserver's IP
+    ```
      sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/ssl/private/webservice.key -out /etc/ssl/certs/webservice.crt
-6. Enable the default SSL site
+    ```
+11. Enable the default SSL site
+    ```
     sudo a2ensite default-ssl
     sudo systemctl reload apache2
+    ```
 6. Edit the default SSL configuration
+   ```
     sudo nano /etc/apache2/sites-available/default-ssl.conf
+   ```
    Replace it with:
      ```apache
      <VirtualHost *:443>
@@ -68,8 +82,10 @@ After this we can create a simple HTTPS service on the new Ubuntu host. To do th
       CustomLog ${APACHE_LOG_DIR}/webservice-ssl-access.log combined
     </VirtualHost>
      ```
-7. Add HTTPS redirect (necessary for SSL stripping, without this the tool has no purpose)
+8. Add HTTPS redirect (necessary for SSL stripping, without this the tool has no purpose)
+   ```
      sudo nano /etc/apache2/sites-available/000-default.conf
+   ```
    Replace it with:
      ```apache
      <VirtualHost *:80>
@@ -77,16 +93,22 @@ After this we can create a simple HTTPS service on the new Ubuntu host. To do th
         RewriteRule ^/(.*)$ https://%{HTTP_HOST}/$1 [R=301,L]
      </VirtualHost>
      ```
-9. Reload apache
+10. Reload apache
+   ```
    sudo systemctl reload apache2
+   ```
 
 This should already create a functioning webservice which you can visit. For better demonstration of SSL stripping we add a POST request to the page:
 1. Create a directory to log POST requests
+   ```
      sudo mkdir /var/www/logs
      sudo chown www-data:www-data /var/www/logs
      sudo chmod 750 /var/www/logs
-2. Create a POST handler
+   ```
+3. Create a POST handler
+   ```
      sudo nano /var/www/html/post.php
+   ```
    Add the following code:
    ```php
      <?php
@@ -106,8 +128,10 @@ This should already create a functioning webservice which you can visit. For bet
      }
    ?>
      ```
-3. Creat the HTML form
+5. Creat the HTML form
+   ```
    sudo nano /var/www/html/index.html
+   ```
    Add the following code:
    ```html
    <!DOCTYPE html>
@@ -127,10 +151,14 @@ This should already create a functioning webservice which you can visit. For bet
     </body> 
    </html>
        ```
-4. Restart apache
+7. Restart apache
+```
   sudo systemctl restart apache2
+```
 
 The website should now be available and you should be able to fill in messages. When visiting the website you will probably get a certificate warning which you should just ignore. After a client has sent a message it can be viewed on the server with:
+```
   tail -f /var/www/logs/post.log
+```
 
 
