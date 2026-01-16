@@ -50,6 +50,7 @@ After this we can create a simple HTTPS service on the new Ubuntu host. To do th
 6. Edit the default SSL configuration
     sudo nano /etc/apache2/sites-available/default-ssl.conf
    Replace it with:
+     ```apache
      <VirtualHost *:443>
       ServerName 192.168.2.10
 
@@ -66,14 +67,17 @@ After this we can create a simple HTTPS service on the new Ubuntu host. To do th
       ErrorLog ${APACHE_LOG_DIR}/webservice-ssl-error.log
       CustomLog ${APACHE_LOG_DIR}/webservice-ssl-access.log combined
     </VirtualHost>
+     ```
 7. Add HTTPS redirect (necessary for SSL stripping, without this the tool has no purpose)
      sudo nano /etc/apache2/sites-available/000-default.conf
    Replace it with:
+     ```apache
      <VirtualHost *:80>
         RewriteEngine On
         RewriteRule ^/(.*)$ https://%{HTTP_HOST}/$1 [R=301,L]
      </VirtualHost>
-8. Reload apache
+     ```
+9. Reload apache
    sudo systemctl reload apache2
 
 This should already create a functioning webservice which you can visit. For better demonstration of SSL stripping we add a POST request to the page:
@@ -84,6 +88,7 @@ This should already create a functioning webservice which you can visit. For bet
 2. Create a POST handler
      sudo nano /var/www/html/post.php
    Add the following code:
+   ```php
      <?php
       if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $msg = $_POST['message'] ?? '(empty)';
@@ -96,6 +101,7 @@ This should already create a functioning webservice which you can visit. For bet
 
     echo "<h3>it worked</h3>";
     echo "<a href='/'>send another message</a>";
+   ```
 } else {
     echo "use the form to write a message";
 }
@@ -104,8 +110,9 @@ This should already create a functioning webservice which you can visit. For bet
 3. Creat the HTML form
    sudo nano /var/www/html/index.html
    Add the following code:
+   ```html
    <!DOCTYPE html>
-  <html>
+   <html>
     <head>
       <title>message sender</title>
     </head>
@@ -119,7 +126,8 @@ This should already create a functioning webservice which you can visit. For bet
           <input type="submit" value="Send">
         </form>
     </body> 
-  </html>
+   </html>
+  ```
 4. Restart apache
   sudo systemctl restart apache2
 
