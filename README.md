@@ -75,7 +75,7 @@ The tool can be configured using the `config.toml` file, which includes options 
 ### ARP Poisoning
 
 - `poison_warm_up` `(int)`
-  Sets the delay between first 5 batches of forged poison packets.
+  Sets the delay between the first 5 batches of forged poison packets.
 - `poison_delay` `(int)`
   Sets the default delay between each batch of forged poison packets.
 - `poison_icmp` `(bool)`
