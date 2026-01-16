@@ -4,6 +4,14 @@ from dataclasses import dataclass
 from typing import List, Tuple
 
 @dataclass
+class DiscoveryConfig:
+    automatic_discovery: bool
+    skip_discovery: bool
+    hardcoded_group1: List[Tuple[str]]
+    hardcoded_group2: List[Tuple[str]]
+    hardcoded_interface: str
+
+@dataclass
 class ArpConfig:
     poison_warm_up: int
     poison_delay: int
@@ -11,11 +19,6 @@ class ArpConfig:
     poison_reply: bool
     poison_request: bool
     poison_oneway: bool
-    automatic_discovery: bool
-    skip_discovery: bool
-    hardcoded_group1: List[Tuple[str]]
-    hardcoded_group2: List[Tuple[str]]
-    hardcoded_interface: str
     dos_enabled: bool
 
 @dataclass
@@ -25,6 +28,7 @@ class DnsConfig:
 
 @dataclass
 class Config:
+    discovery: DiscoveryConfig
     arp: ArpConfig
     dns: DnsConfig
 
@@ -34,6 +38,7 @@ def _load() -> Config:
         data = tomllib.load(f)
 
     return Config(
+        discovery=DiscoveryConfig(**data["discovery"]),
         arp=ArpConfig(**data["arp"]),
         dns=DnsConfig(**data["dns"])
         )
