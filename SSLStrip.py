@@ -154,8 +154,6 @@ def start_proxy():
     sock.bind(("0.0.0.0", 8080))
     sock.listen(50)
 
-    print("[+] Proxy listening on 8080")
-
     while True:
         client, addr = sock.accept()
         print("[+] GOT CONNECTION FROM", addr)
