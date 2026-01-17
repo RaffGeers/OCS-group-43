@@ -27,10 +27,15 @@ class DnsConfig:
     domains: List[Tuple[str]]
 
 @dataclass
+class SSLConfig:
+    enabled: bool
+
+@dataclass
 class Config:
     discovery: DiscoveryConfig
     arp: ArpConfig
     dns: DnsConfig
+    ssl: SSLConfig
 
 def _load() -> Config:
     path = Path(__file__).parent / "config.toml"
@@ -40,7 +45,8 @@ def _load() -> Config:
     return Config(
         discovery=DiscoveryConfig(**data["discovery"]),
         arp=ArpConfig(**data["arp"]),
-        dns=DnsConfig(**data["dns"])
+        dns=DnsConfig(**data["dns"]),
+        ssl=SSLConfig(**data["ssl"])
         )
 
 config = _load()

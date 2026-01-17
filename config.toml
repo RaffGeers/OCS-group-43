@@ -16,7 +16,7 @@ poison_icmp = 0         # boolean
 poison_reply = 1        # boolean
 poison_request = 1      # boolean
 poison_oneway = 0       # boolean
-dos_enabled = 1         # boolean
+dos_enabled = 0         # boolean
 
 [dns]
 enabled = 0     # boolean
@@ -26,3 +26,6 @@ domains = [
     ["tue.nl", "1.2.3.4"],
     ["tue.com", "1.2.3.4"]
 ]
+
+[ssl]
+enabled = 1     # boolean

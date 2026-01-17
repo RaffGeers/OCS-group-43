@@ -63,6 +63,6 @@ def setup_iptables(server_ip, self_ip):
 	run("iptables -A FORWARD -p tcp --sport 8080 -m conntrack --ctstate ESTABLISHED -j ACCEPT")
     
 # Example usage
-setup_bridge("192.168.1.102", "192.168.1.1", "eth0")
-setup_iptables("192.168.2.100", "192.168.1.102")
+# setup_bridge("192.168.1.102", "192.168.1.1", "eth0")
+# setup_iptables("192.168.2.100", "192.168.1.102")
 	
