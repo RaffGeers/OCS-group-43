@@ -106,15 +106,12 @@ def http_proxy(client_sock):
         client_sock.close()
         return
 
-    print(request)
-
     headers = request.split(b"\r\n")
     host = None
     path = b"/"
-    method = request.split(b" ", 1)[0]
 
     try:
-        path = request.split(b" ")[1]
+        path = request.split(b" ", 2)[1]
     except:
         pass
 
@@ -127,7 +124,7 @@ def http_proxy(client_sock):
         client_sock.close()
         return
 
-    if host in hosts_using_https and method == b"GET":
+    if host in hosts_using_https:
         response = fetch_https(host, path)
         client_sock.sendall(ssl_strip_headers(response))
         client_sock.close()
@@ -140,7 +137,7 @@ def http_proxy(client_sock):
     response = read_http_response(server_sock)
     server_sock.close()
 
-    if is_https_redirect(response) and method == b"GET":
+    if is_https_redirect(response):
         hosts_using_https.add(host)
         response = fetch_https(host, path)
 
