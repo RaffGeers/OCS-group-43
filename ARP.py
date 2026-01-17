@@ -1,5 +1,6 @@
 from scapy.all import *
 from Forward import *
+from Setup import *
 from DNS import *
 import threading
 from config import config
