@@ -21,8 +21,8 @@ def cleanup_forward(interface):
 	run(f"sysctl -w net.ipv4.conf.{interface}.send_redirects=1")
 
 def setup_bridge(self_ip, router_ip, interface, subnet="24"):
-	#disable NetworkManager
-	run("nmcli device set eth0 managed no")
+	# Disable NetworkManager
+	run(f"nmcli device set {interface} managed no")
 	# Load module and enable bridge iptables
 	run("modprobe br_netfilter")
 	run("sysctl -w net.bridge.bridge-nf-call-iptables=1")
@@ -54,15 +54,38 @@ def setup_bridge(self_ip, router_ip, interface, subnet="24"):
 	run("sysctl -w net.ipv4.conf.all.rp_filter=0")
     
 def setup_iptables(server_ip, self_ip):
+	# Flush existing rules
 	run("iptables -F")
 	run("iptables -t nat -F")
+	
 	run(f"iptables -t nat -A PREROUTING -s 192.168.1.0/24 -d {server_ip} -p tcp --dport 80 -j DNAT --to-destination {self_ip}:8080")
+	
 	run("iptables -A INPUT -p tcp --dport 8080 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT")
 	run("iptables -A OUTPUT -p tcp --sport 8080 -m conntrack --ctstate ESTABLISHED -j ACCEPT")
 	run("iptables -A FORWARD -p tcp --dport 8080 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT")
 	run("iptables -A FORWARD -p tcp --sport 8080 -m conntrack --ctstate ESTABLISHED -j ACCEPT")
+	
+def remove_bridge(interface, self_ip, router_ip, br_name="br0", subnet="24"):
+	# Bring bridge down if it exists
+	if subprocess.run(f"ip link show {br_name}", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
+		run(f"ip link set {br_name} down")
+		run(f"ip link set {interface} nomaster")
+		run(f"ip link delete {br_name}")
+	
+	# Flush any leftover IPs
+	run(f"ip addr flush dev {interface}")
+	
+	# Assign static IP
+	run(f"ip addr add {self_ip}/{subnet} dev {interface}")
+
+	# Bring interface up
+	run(f"ip link set {interface} up")
+
+	# Add default route
+	run(f"ip route add default via {router_ip}")
+
     
 # Example usage
-setup_bridge("192.168.1.102", "192.168.1.1", "eth0")
-setup_iptables("192.168.2.100", "192.168.1.102")
-	
+#setup_bridge("192.168.1.102", "192.168.1.1", "eth0")
+#setup_iptables("192.168.2.100", "192.168.1.102")
+remove_bridge("eth0", "192.168.1.102", "192.168.1.1")
