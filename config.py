@@ -4,22 +4,43 @@ from dataclasses import dataclass
 from typing import List, Tuple
 
 @dataclass
+class DiscoveryConfig:
+    automatic_discovery: bool
+    skip_discovery: bool
+    hardcoded_group1: List[Tuple[str]]
+    hardcoded_group2: List[Tuple[str]]
+    hardcoded_interface: str
+
+@dataclass
+class ArpConfig:
+    poison_warm_up: int
+    poison_delay: int
+    poison_icmp: bool
+    poison_reply: bool
+    poison_request: bool
+    poison_oneway: bool
+    dos_enabled: bool
+
+@dataclass
+class DnsConfig:
+    enabled: bool
+    domains: List[Tuple[str]]
+
+@dataclass
 class Config:
-    arp_poison_warm_up: int
-    arp_poison_delay: int
-    arp_poison_icmp: bool
-    arp_poison_reply: bool
-    arp_poison_request: bool
-    arp_poison_oneway: bool
-    arp_skip_discovery: bool
-    arp_hardcoded_group1: List[Tuple[str]]
-    arp_hardcoded_group2: List[Tuple[str]]
-    arp_hardcoded_interface: str
+    discovery: DiscoveryConfig
+    arp: ArpConfig
+    dns: DnsConfig
 
 def _load() -> Config:
     path = Path(__file__).parent / "config.toml"
     with path.open("rb") as f:
         data = tomllib.load(f)
-    return Config(**data["arp"])
+
+    return Config(
+        discovery=DiscoveryConfig(**data["discovery"]),
+        arp=ArpConfig(**data["arp"]),
+        dns=DnsConfig(**data["dns"])
+        )
 
 config = _load()
