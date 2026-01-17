@@ -81,20 +81,14 @@ def is_https_redirect(resp):
     ) and b"Location: https://" in resp
 
 
-def fetch_https(host, path):
+def forward_https(host, request):
     context = ssl._create_unverified_context()
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     tls = context.wrap_socket(sock, server_hostname=host)
 
     tls.connect((host, 443))
 
-    req = (
-        b"GET " + path + b" HTTP/1.1\r\n"
-        b"Host: " + host.encode() + b"\r\n"
-        b"Connection: close\r\n\r\n"
-    )
-
-    tls.sendall(req)
+    tls.sendall(request)
     resp = read_http_response(tls)
     tls.close()
 
@@ -125,7 +119,7 @@ def http_proxy(client_sock):
         return
 
     if host in hosts_using_https:
-        response = fetch_https(host, path)
+        response = forward_https(host, request)
         client_sock.sendall(ssl_strip_headers(response))
         client_sock.close()
         return
@@ -139,7 +133,7 @@ def http_proxy(client_sock):
 
     if is_https_redirect(response):
         hosts_using_https.add(host)
-        response = fetch_https(host, path)
+        response = forward_https(host, request)
 
     client_sock.sendall(ssl_strip_headers(response))
     client_sock.close()
