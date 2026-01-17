@@ -6,144 +6,157 @@ import ssl
 LISTEN_HOST = "0.0.0.0"
 LISTEN_PORT = 8080
 
-host_to_tls = {}
 hosts_using_https = set()
 
-def should_use_https(host):
-	return host in hosts_using_https
+def recv_headers(sock):
+    data = b""
+    while b"\r\n\r\n" not in data:
+        chunk = sock.recv(4096)
+        if not chunk:
+            break
+        data += chunk
+    return data
+
+
+def recv_http_request(sock):
+    data = recv_headers(sock)
+    if not data:
+        return b""
+
+    headers, _, rest = data.partition(b"\r\n\r\n")
+    body = rest
+
+    content_length = 0
+    for line in headers.split(b"\r\n"):
+        if line.lower().startswith(b"content-length:"):
+            content_length = int(line.split(b":", 1)[1].strip())
+            break
+
+    while len(body) < content_length:
+        body += sock.recv(4096)
+
+    return headers + b"\r\n\r\n" + body
+
+
+def read_http_response(sock):
+    data = recv_headers(sock)
+    if not data:
+        return b""
+
+    headers, _, rest = data.partition(b"\r\n\r\n")
+    body = rest
+
+    content_length = 0
+    for line in headers.split(b"\r\n"):
+        if line.lower().startswith(b"content-length:"):
+            content_length = int(line.split(b":", 1)[1].strip())
+            break
+
+    while len(body) < content_length:
+        body += sock.recv(4096)
+
+    return headers + b"\r\n\r\n" + body
+
+
+def ssl_strip_headers(data):
+    headers, sep, body = data.partition(b"\r\n\r\n")
+
+    headers = headers.replace(b"https://", b"http://")
+
+    headers = b"\r\n".join(
+        line for line in headers.split(b"\r\n")
+        if not (
+            line.lower().startswith(b"strict-transport-security") or
+            line.lower().startswith(b"upgrade-insecure-requests")
+        )
+    )
+
+    return headers + sep + body
+
+
+def is_https_redirect(resp):
+    return (
+        resp.startswith(b"HTTP/1.1 301") or
+        resp.startswith(b"HTTP/1.1 302")
+    ) and b"Location: https://" in resp
+
 
 def fetch_https(host, path):
-	global host_to_tls
+    context = ssl._create_unverified_context()
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    tls = context.wrap_socket(sock, server_hostname=host)
 
-	if host in host_to_tls:
-		tls = host_to_tls[host]
-	else:
-		context = ssl._create_unverified_context()
-		sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-		tls = context.wrap_socket(sock, server_hostname=host)
-		tls.connect((host, 443))
-		host_to_tls[host] = tls
+    tls.connect((host, 443))
 
-	req = b"GET " + path + b" HTTP/1.1\r\n"
-	req += b"Host: " + host.encode() + b"\r\n"
-	req += b"Connection: keep-alive\r\n\r\n"
+    req = (
+        b"GET " + path + b" HTTP/1.1\r\n"
+        b"Host: " + host.encode() + b"\r\n"
+        b"Connection: close\r\n\r\n"
+    )
 
-	try:
-		tls.sendall(req)
-	except:
-		del host_to_tls[host]
-		return fetch_https(host, path)
+    tls.sendall(req)
+    resp = read_http_response(tls)
+    tls.close()
 
-	response = read_http_response(tls)
-	return response
-
-def ssl_strip(data):
-	data = data.replace(b"https://", b"http://")
-
-	# remove HSTS response header
-	data = b"\r\n".join(
-		line for line in data.split(b"\r\n")
-		if not line.lower().startswith(b"strict-transport-security")
-	)
-
-	return data
-
-def is_https_redirect(data):
-	return (
-		data.startswith(b"HTTP/1.1 301") or
-		data.startswith(b"HTTP/1.1 302")
-	) and b"Location: https://" in data
-
+    return resp
 
 def http_proxy(client_sock):
-	request = client_sock.recv(8192)
-	if not request:
-		client_sock.close()
-		return
+    request = recv_http_request(client_sock)
+    if not request:
+        client_sock.close()
+        return
 
-	print(request)
-	headers = request.split(b"\r\n")
-	host = None
-	path = b"/"
+    print(request)
 
-	try:
-		path = request.split(b" ")[1]
-	except:
-		pass
+    headers = request.split(b"\r\n")
+    host = None
+    path = b"/"
+    method = request.split(b" ", 1)[0]
 
-	for h in headers:
-		if h.lower().startswith(b"host:"):
-			host = h.split(b":", 1)[1].strip().decode()
-			break
+    try:
+        path = request.split(b" ")[1]
+    except:
+        pass
 
-	if not host:
-		client_sock.close()
-		return
+    for h in headers:
+        if h.lower().startswith(b"host:"):
+            host = h.split(b":", 1)[1].strip().decode()
+            break
 
-	if host in hosts_using_https:
-		response = fetch_https(host, path)
-		client_sock.sendall(ssl_strip(response))
-		client_sock.close()
-		return
+    if not host:
+        client_sock.close()
+        return
 
-	server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-	server_sock.connect((host, 80))
-	server_sock.sendall(request)
+    if host in hosts_using_https and method == b"GET":
+        response = fetch_https(host, path)
+        client_sock.sendall(ssl_strip_headers(response))
+        client_sock.close()
+        return
 
-	response = read_http_response(server_sock)
-	print(response)
-	server_sock.close()
+    server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_sock.connect((host, 80))
+    server_sock.sendall(ssl_strip_headers(request))
 
-	if is_https_redirect(response):
-		hosts_using_https.add(host)
-		response = fetch_https(host, path)
+    response = read_http_response(server_sock)
+    server_sock.close()
 
-	client_sock.sendall(ssl_strip(response))
-	client_sock.close()
-	
-def read_http_response(sock):
-	data = b""
+    if is_https_redirect(response) and method == b"GET":
+        hosts_using_https.add(host)
+        response = fetch_https(host, path)
 
-	# read all headers (\r\n\r\n terminates headers)
-	while b"\r\n\r\n" not in data:
-		chunk = sock.recv(4096)
-		if not chunk:
-			break
-		data += chunk
-		
-	if b"\r\n\r\n" not in data:
-		# incomplete response
-		return data
-
-	headers, body = data.split(b"\r\n\r\n", 1)
-
-	content_length = None
-	for line in headers.split(b"\r\n"):
-		if line.lower().startswith(b"content-length:"):
-			content_length = int(line.split(b":", 1)[1].strip())
-			break
-	# TODO maybe do something if content length is None or negative
-
-	# read the rest of the body
-	remaining = content_length - len(body)
-	while remaining > 0:
-		chunk = sock.recv(min(4096, remaining))
-		if not chunk:
-			break
-		body += chunk
-		remaining -= len(chunk)
-
-	return headers + b"\r\n\r\n" + body
+    client_sock.sendall(ssl_strip_headers(response))
+    client_sock.close()
 
 
 def start_proxy():
-	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-	sock.bind((LISTEN_HOST, LISTEN_PORT))
-	sock.listen(5)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind(("0.0.0.0", 8080))
+    sock.listen(50)
 
-	print(f"[+] Proxy listening on {LISTEN_PORT}")
+    print("[+] Proxy listening on 8080")
 
-	while True:
-		client, addr = sock.accept()
-		http_proxy(client)
-
+    while True:
+        client, addr = sock.accept()
+        print("[+] GOT CONNECTION FROM", addr)
+        http_proxy(client)
