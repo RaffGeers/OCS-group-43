@@ -40,82 +40,91 @@ After this we can create a simple HTTPS service on the new Ubuntu host. To do th
      sudo apt update
      sudo apt install apache2 -y
    ```
-3. Verify apache is running
+2. Verify apache is running
    ```
      systemctl status apache2
    ```
-5. Enable required apache modules
+3. Enable required apache modules
    ```
      sudo a2enmod ssl
      sudo a2enmod rewrite
      sudo a2enmod headers
      sudo systemctl restart apache2
    ```
-7. Install PHP. We do this because it's an easy way to make a website that sends a POST request, which is a nice way to demonstrate SSL stripping works
+4. Install PHP. We do this because it's an easy way to make a website that sends a POST request, which is a nice way to demonstrate SSL stripping works
    ```
      sudo apt install php libapache2-mod-php -y
      sudo systemctl restart apache2
    ```
-9. Create a self signed certificate. Note that browsers will complain about this certificate but this is acceptable in our case. When prompted for common name, use the webserver's IP
-    ```
-     sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/ssl/private/webservice.key -out /etc/ssl/certs/webservice.crt
-    ```
-11. Enable the default SSL site
-    ```
-    sudo a2ensite default-ssl
-    sudo systemctl reload apache2
-    ```
-6. Edit the default SSL configuration
+5. Create a self signed certificate. Note that browsers will complain about this certificate but this is acceptable in our case. When prompted for common name, use the webserver's IP
+   ```
+    sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/ssl/private/webservice.key -out /etc/ssl/certs/webservice.crt
+   ```
+6. Enable the default SSL site
+   ```
+   sudo a2ensite default-ssl
+   sudo systemctl reload apache2
+   ```
+7. Edit the default SSL configuration
+
    ```
     sudo nano /etc/apache2/sites-available/default-ssl.conf
    ```
+
    Replace it with:
-     ```apache
-     <VirtualHost *:443>
-      ServerName 192.168.2.10
 
-      DocumentRoot /var/www/html
+   ```apache
+   <VirtualHost *:443>
+    ServerName 192.168.2.10
 
-      SSLEngine on
-      SSLCertificateFile /etc/ssl/certs/webservice.crt
-      SSLCertificateKeyFile /etc/ssl/private/webservice.key
+    DocumentRoot /var/www/html
 
-      <Directory /var/www/html>
-        Require all granted
-      </Directory>
+    SSLEngine on
+    SSLCertificateFile /etc/ssl/certs/webservice.crt
+    SSLCertificateKeyFile /etc/ssl/private/webservice.key
 
-      ErrorLog ${APACHE_LOG_DIR}/webservice-ssl-error.log
-      CustomLog ${APACHE_LOG_DIR}/webservice-ssl-access.log combined
-    </VirtualHost>
-     ```
+    <Directory /var/www/html>
+      Require all granted
+    </Directory>
+
+    ErrorLog ${APACHE_LOG_DIR}/webservice-ssl-error.log
+    CustomLog ${APACHE_LOG_DIR}/webservice-ssl-access.log combined
+   </VirtualHost>
+   ```
+
 8. Add HTTPS redirect (necessary for SSL stripping, without this the tool has no purpose)
    ```
      sudo nano /etc/apache2/sites-available/000-default.conf
    ```
    Replace it with:
-     ```apache
-     <VirtualHost *:80>
-        RewriteEngine On
-        RewriteRule ^/(.*)$ https://%{HTTP_HOST}/$1 [R=301,L]
-     </VirtualHost>
-     ```
-10. Reload apache
+   ```apache
+   <VirtualHost *:80>
+      RewriteEngine On
+      RewriteRule ^/(.*)$ https://%{HTTP_HOST}/$1 [R=301,L]
+   </VirtualHost>
    ```
-   sudo systemctl reload apache2
-   ```
+9. Reload apache
+
+```
+sudo systemctl reload apache2
+```
 
 This should already create a functioning webservice which you can visit. For better demonstration of SSL stripping we add a POST request to the page:
+
 1. Create a directory to log POST requests
    ```
      sudo mkdir /var/www/logs
      sudo chown www-data:www-data /var/www/logs
      sudo chmod 750 /var/www/logs
    ```
-3. Create a POST handler
+2. Create a POST handler
+
    ```
      sudo nano /var/www/html/post.php
    ```
+
    Add the following code:
+
    ```php
      <?php
       if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -133,40 +142,47 @@ This should already create a functioning webservice which you can visit. For bet
          echo "use the form to write a message";
      }
    ?>
-     ```
-5. Creat the HTML form
+   ```
+
+3. Creat the HTML form
+
    ```
    sudo nano /var/www/html/index.html
    ```
+
    Add the following code:
-   ```html
+
+   ````html
    <!DOCTYPE html>
    <html>
-    <head>
-      <title>message sender</title>
-    </head>
-    <body>
-      <h2>send a message</h2>
+     <head>
+       <title>message sender</title>
+     </head>
+     <body>
+       <h2>send a message</h2>
 
-      <form method="POST" action="/post.php">
-          <label for="message">message</label><br>
-          <textarea name="message" rows="4" cols="40"></textarea><br><br>
+       <form method="POST" action="/post.php">
+         <label for="message">message</label><br />
+         <textarea name="message" rows="4" cols="40"></textarea><br /><br />
 
-          <input type="submit" value="Send">
-        </form>
-    </body> 
+         <input type="submit" value="Send" />
+       </form>
+     </body>
    </html>
-       ```
-7. Restart apache
+   ```
+   ````
+
+4. Restart apache
+
 ```
   sudo systemctl restart apache2
 ```
 
 The website should now be available and you should be able to fill in messages. When visiting the website you will probably get a certificate warning which you should just ignore. After a client has sent a message it can be viewed on the server with:
+
 ```
   tail -f /var/www/logs/post.log
 ```
-
 
 ## REQUIREMENTS
 
@@ -244,6 +260,11 @@ The tool can be configured using the `config.toml` file, which includes options 
   Enables or disables DNS spoofing. When enabled, it intercepts DNS queries from the victims, and forges responses to them if the domain is present in the list below.
 - `domains` `(List(Pair(str)))`
   Contains the list of domains to be DNS spoofed. Each entry should contain a pair of the domain name and the fake IP which the victim should be redirected to.
+
+### SSL Stripping
+
+- `enabled` `(bool)`
+  Enables or disables SSL stripping.
 
 ## HOW TO RUN
 
